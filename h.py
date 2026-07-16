@@ -17,7 +17,8 @@ def show_main_app():
             ]
         )
         if st.button("🚪 Logout"):
-            st.session_state.clear()
+            st.session_state.logged_in = False
+            st.session_state.auth_page = "Login"
             st.rerun()
 
     if menu == "🏠 Home":
@@ -124,11 +125,14 @@ def show_main_app():
             if st.button("🔒 Update Password", use_container_width=True):
                 if not current_password or not new_password or not confirm_password:
                     st.error("Please fill in all fields.")
+                elif st.session_state.registered_users.get(st.session_state.user_email) != current_password:
+                    st.error("❌ Current password is incorrect.")
                 elif new_password != confirm_password:
                     st.error("New passwords do not match.")
                 elif len(new_password) < 6:
                     st.error("Password must be at least 6 characters.")
                 else:
+                    st.session_state.registered_users[st.session_state.user_email] = new_password
                     st.success("✅ Password updated successfully!")
 
         with tab3:
@@ -144,7 +148,12 @@ def show_main_app():
                     st.error("Email addresses do not match.")
                 elif "@" not in new_email:
                     st.error("Please enter a valid email address.")
+                elif st.session_state.registered_users.get(st.session_state.user_email) != password_check:
+                    st.error("❌ Incorrect password.")
                 else:
+                    old_email = st.session_state.user_email
+                    pwd = st.session_state.registered_users.pop(old_email)
+                    st.session_state.registered_users[new_email] = pwd
                     st.session_state.user_email = new_email
                     st.success(f"✅ Email updated to {new_email} successfully!")
 
@@ -158,8 +167,12 @@ def show_main_app():
                     st.error("Please fill in all fields.")
                 elif confirm_delete != "DELETE":
                     st.error("Please type DELETE exactly to confirm.")
+                elif st.session_state.registered_users.get(st.session_state.user_email) != delete_password:
+                    st.error("❌ Incorrect password.")
                 else:
-                    st.session_state.clear()
+                    st.session_state.registered_users.pop(st.session_state.user_email, None)
+                    st.session_state.logged_in = False
+                    st.session_state.auth_page = "Login"
                     st.rerun()
 
 
@@ -167,32 +180,57 @@ def show_main_app():
 def show_login():
     st.title("🏥 Pharmacy Management System")
     st.subheader("🔐 Login")
+
+    if "registered_users" not in st.session_state:
+        st.session_state.registered_users = {}
+
     email = st.text_input("Email", key="login_email")
     password = st.text_input("Password", type="password", key="login_password")
+
     if st.button("✅ Login", use_container_width=True):
-        if email and password:
+        # TC-02: Empty fields
+        if not email or not password:
+            st.error("Please enter email and password.")
+        # TC-01: Valid credentials check
+        elif email not in st.session_state.registered_users:
+            st.error("❌ Email not found. Please sign up first.")
+        elif st.session_state.registered_users[email] != password:
+            st.error("❌ Incorrect password. Please try again.")
+        else:
             st.session_state.logged_in = True
             st.session_state.user_email = email
-            st.success("Login successful! Redirecting...")
+            st.success("✅ Login successful! Redirecting...")
             st.rerun()
-        else:
-            st.error("Please enter email and password.")
 
 
 # --- Sign Up Page ---
 def show_signup():
     st.title("🏥 Pharmacy Management System")
     st.subheader("📝 Sign Up")
+
+    if "registered_users" not in st.session_state:
+        st.session_state.registered_users = {}
+
     name = st.text_input("Full Name", key="signup_name")
     email = st.text_input("Email", key="signup_email")
     password = st.text_input("Password", type="password", key="signup_password")
     confirm = st.text_input("Confirm Password", type="password", key="signup_confirm")
+
     if st.button("🆕 Create Account", use_container_width=True):
         if not name or not email or not password or not confirm:
             st.error("Please fill in all fields.")
+        elif "@" not in email:
+            st.error("Please enter a valid email address.")
+        elif email in st.session_state.registered_users:
+            st.error("❌ Email already registered. Please login.")
+        # TC-03: Password mismatch
         elif password != confirm:
             st.error("Passwords do not match.")
+        elif len(password) < 6:
+            st.error("Password must be at least 6 characters.")
         else:
+            st.session_state.registered_users[email] = password
+            st.session_state.user_name = name
             st.success("✅ Account created successfully! Please login.")
             st.session_state.auth_page = "Login"
             st.rerun()
@@ -202,12 +240,28 @@ def show_signup():
 def show_forgot_password():
     st.title("🏥 Pharmacy Management System")
     st.subheader("🔑 Forgot Password")
+
+    if "registered_users" not in st.session_state:
+        st.session_state.registered_users = {}
+
     email = st.text_input("Enter your registered Email", key="forgot_email")
-    if st.button("📩 Send Reset Link", use_container_width=True):
-        if email:
-            st.success(f"✅ Password reset link sent to {email}. Please check your inbox.")
+    new_pass = st.text_input("New Password", type="password", key="forgot_new_pass")
+    confirm_pass = st.text_input("Confirm New Password", type="password", key="forgot_confirm_pass")
+
+    if st.button("🔑 Reset Password", use_container_width=True):
+        if not email or not new_pass or not confirm_pass:
+            st.error("Please fill in all fields.")
+        elif email not in st.session_state.registered_users:
+            st.error("❌ Email not found. Please sign up first.")
+        elif new_pass != confirm_pass:
+            st.error("Passwords do not match.")
+        elif len(new_pass) < 6:
+            st.error("Password must be at least 6 characters.")
         else:
-            st.error("Please enter your email address.")
+            st.session_state.registered_users[email] = new_pass
+            st.success("✅ Password reset successfully! Please login.")
+            st.session_state.auth_page = "Login"
+            st.rerun()
 
 
 # =============================================
@@ -218,6 +272,9 @@ if "logged_in" not in st.session_state:
 
 if "auth_page" not in st.session_state:
     st.session_state.auth_page = "Login"
+
+if "registered_users" not in st.session_state:
+    st.session_state.registered_users = {}
 
 # --- STEP 1: Show Login Page if not logged in ---
 if not st.session_state.logged_in:
